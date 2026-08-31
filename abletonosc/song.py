@@ -8,6 +8,32 @@ from typing import Tuple, Any
 
 from .handler import AbletonOSCHandler
 
+def _track_for_device(device, song):
+    """Walk canonical_parent up to the Track containing `device`."""
+    obj = device
+    while obj is not None:
+        try:
+            list(song.tracks).index(obj)
+            return obj
+        except ValueError:
+            obj = obj.canonical_parent
+    return None
+
+def _device_path_for(device, track):
+    """Chain-aware path [topDevice, chain, nestedDevice, ...] to `device`."""
+    path = []
+    obj = device
+    while obj != track:
+        parent = obj.canonical_parent
+        if parent is None:
+            return None
+        if hasattr(parent, "devices"):
+            path.insert(0, list(parent.devices).index(obj))
+        else:
+            path.insert(0, list(parent.chains).index(obj))
+        obj = parent
+    return tuple(path)
+
 class SongHandler(AbletonOSCHandler):
     def __init__(self, manager):
         super().__init__(manager)
@@ -282,6 +308,50 @@ class SongHandler(AbletonOSCHandler):
 
         self.osc_server.add_handler("/live/song/start_listen/beat", start_beat_listener)
         self.osc_server.add_handler("/live/song/stop_listen/beat", stop_beat_listener)
+
+        #--------------------------------------------------------------------------------
+        # TouchLive patch: the appointed device (the blue hand)
+        #--------------------------------------------------------------------------------
+        def appointed_device_info():
+            device = self.song.appointed_device
+            if device is None:
+                return None
+            track = _track_for_device(device, self.song)
+            if track is None:
+                return None
+            path = _device_path_for(device, track)
+            if path is None:
+                return None
+            return (list(self.song.tracks).index(track), *path, device.class_name, device.name)
+
+        def get_appointed_device_info(params: Tuple[Any] = ()):
+            return appointed_device_info()
+
+        def appointed_device_listener(params: Tuple[Any] = ()):
+            def callback():
+                info = appointed_device_info()
+                if info is not None:
+                    self.osc_server.send("/live/song/get/appointed_device_info", info)
+
+            listener_key = ("appointed_device_info", ())
+            if listener_key in self.listener_functions:
+                appointed_device_remove_listener()
+
+            self.song.add_appointed_device_listener(callback)
+            self.listener_functions[listener_key] = callback
+            self.listener_objects[listener_key] = self.song
+            callback()
+
+        def appointed_device_remove_listener(params: Tuple[Any] = ()):
+            listener_key = ("appointed_device_info", ())
+            if listener_key in self.listener_functions:
+                self.song.remove_appointed_device_listener(self.listener_functions[listener_key])
+                del self.listener_functions[listener_key]
+                del self.listener_objects[listener_key]
+
+        self.osc_server.add_handler("/live/song/get/appointed_device_info", get_appointed_device_info)
+        self.osc_server.add_handler("/live/song/start_listen/appointed_device", appointed_device_listener)
+        self.osc_server.add_handler("/live/song/stop_listen/appointed_device", appointed_device_remove_listener)
 
     def current_song_time_changed(self):
         #--------------------------------------------------------------------------------
