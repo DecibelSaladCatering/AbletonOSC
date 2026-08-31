@@ -111,6 +111,16 @@ class AbletonOSCHandler(Component):
         Clears all listener functions, to prevent listeners continuing to report after a reload.
         """
         for listener_key in list(self.listener_functions.keys())[:]:
-            target = self.listener_objects[listener_key]
+            target = self.listener_objects.get(listener_key)
             prop, params = listener_key
-            self._stop_listen(target, prop, params)
+            if target is None:
+                self.listener_functions.pop(listener_key, None)
+                continue
+            try:
+                self._stop_listen(target, prop, params)
+            except Exception as e:
+                # Custom listener keys (e.g. TouchLive patches) don't map to
+                # add/remove_<prop>_listener methods — drop them cleanly.
+                self.logger.info("Could not auto-clear listener %s (likely benign): %s" % (str(listener_key), e))
+                self.listener_functions.pop(listener_key, None)
+                self.listener_objects.pop(listener_key, None)

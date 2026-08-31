@@ -90,12 +90,14 @@ class ViewHandler(AbletonOSCHandler):
                     self.song.view.selected_track.view.remove_selected_device_listener(old_callback)
                 self.song.view.selected_track.view.add_selected_device_listener(device_changed)
                 self.listener_functions[device_key] = device_changed
+                self.listener_objects[device_key] = self.song.view.selected_track.view
                 device_changed()
 
             track_key = ("selected_device_track_hook", ())
             if track_key not in self.listener_functions:
                 self.song.view.add_selected_track_listener(track_changed)
                 self.listener_functions[track_key] = track_changed
+                self.listener_objects[track_key] = self.song.view
             track_changed()
 
         def stop_listen_selected_device(params: Optional[Tuple] = ()):
@@ -104,10 +106,12 @@ class ViewHandler(AbletonOSCHandler):
                 old_callback = self.listener_functions[device_key]
                 self.song.view.selected_track.view.remove_selected_device_listener(old_callback)
                 del self.listener_functions[device_key]
+                del self.listener_objects[device_key]
             track_key = ("selected_device_track_hook", ())
             if track_key in self.listener_functions:
                 self.song.view.remove_selected_track_listener(self.listener_functions[track_key])
                 del self.listener_functions[track_key]
+                del self.listener_objects[track_key]
 
         #--------------------------------------------------------------------------------
         # TouchLive patch: selected-parameter capture (mapping pathway)
@@ -158,6 +162,7 @@ class ViewHandler(AbletonOSCHandler):
                 stop_listen_selected_parameter()
             self.song.view.add_selected_parameter_listener(parameter_changed)
             self.listener_functions[listener_key] = parameter_changed
+            self.listener_objects[listener_key] = self.song.view
             parameter_changed()
 
         def stop_listen_selected_parameter(params: Optional[Tuple] = ()):
@@ -165,6 +170,7 @@ class ViewHandler(AbletonOSCHandler):
             if listener_key in self.listener_functions:
                 self.song.view.remove_selected_parameter_listener(self.listener_functions[listener_key])
                 del self.listener_functions[listener_key]
+                del self.listener_objects[listener_key]
 
         self.osc_server.add_handler("/live/view/get/selected_scene", get_selected_scene)
         self.osc_server.add_handler("/live/view/get/selected_track", get_selected_track)

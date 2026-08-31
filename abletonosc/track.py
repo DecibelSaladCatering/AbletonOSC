@@ -102,6 +102,42 @@ class TrackHandler(AbletonOSCHandler):
         self.osc_server.add_handler("/live/track/get/send", create_track_callback(track_get_send))
         self.osc_server.add_handler("/live/track/set/send", create_track_callback(track_set_send))
 
+        #--------------------------------------------------------------------------------
+        # TouchLive patch: send value listeners (two-way sends for the mixer)
+        #--------------------------------------------------------------------------------
+        def track_send_listener(params: Tuple[Any] = ()):
+            track_index, send_id = int(params[0]), int(params[1])
+            track = self.song.tracks[track_index]
+            send = track.mixer_device.sends[send_id]
+
+            def property_changed_callback():
+                value = send.value
+                self.logger.info("Send %s of track %s changed: %s" % (send_id, track_index, value))
+                self.osc_server.send("/live/track/get/send", (track_index, send_id, value))
+
+            listener_key = ('track_send', (track_index, send_id))
+            if listener_key in self.listener_functions:
+                track_send_remove_listener(params)
+
+            send.add_value_listener(property_changed_callback)
+            self.listener_functions[listener_key] = property_changed_callback
+            self.listener_objects[listener_key] = send
+            property_changed_callback()
+
+        def track_send_remove_listener(params: Tuple[Any] = ()):
+            track_index, send_id = int(params[0]), int(params[1])
+            listener_key = ('track_send', (track_index, send_id))
+            if listener_key in self.listener_functions:
+                listener_function = self.listener_functions[listener_key]
+                self.song.tracks[track_index].mixer_device.sends[send_id].remove_value_listener(listener_function)
+                del self.listener_functions[listener_key]
+                del self.listener_objects[listener_key]
+            else:
+                self.logger.warning("No send listener found for: %s" % str(params))
+
+        self.osc_server.add_handler("/live/track/start_listen/send", track_send_listener)
+        self.osc_server.add_handler("/live/track/stop_listen/send", track_send_remove_listener)
+
         def track_delete_clip(track, params: Tuple[Any]):
             clip_index, = params
             track.clip_slots[clip_index].delete_clip()

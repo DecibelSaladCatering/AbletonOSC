@@ -206,6 +206,7 @@ class DeviceHandler(AbletonOSCHandler):
 
             device.parameters[param_index].add_value_listener(property_changed_callback)
             self.listener_functions[listener_key] = property_changed_callback
+            self.listener_objects[listener_key] = device.parameters[param_index]
             property_changed_callback()
 
         def path_parameter_remove_value_listener(params: Tuple[Any]):
@@ -217,6 +218,7 @@ class DeviceHandler(AbletonOSCHandler):
                 listener_function = self.listener_functions[listener_key]
                 resolve_device(track_index, path).parameters[param_index].remove_value_listener(listener_function)
                 del self.listener_functions[listener_key]
+                del self.listener_objects[listener_key]
             else:
                 self.logger.warning("No path listener found for: %s" % str(params))
 
