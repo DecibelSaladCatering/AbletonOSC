@@ -140,3 +140,92 @@ class DeviceHandler(AbletonOSCHandler):
         self.osc_server.add_handler("/live/device/get/parameter/name", create_device_callback(device_get_parameter_name))
         self.osc_server.add_handler("/live/device/start_listen/parameter/value", create_device_callback(device_get_parameter_value_listener, include_ids = True))
         self.osc_server.add_handler("/live/device/stop_listen/parameter/value", create_device_callback(device_get_parameter_remove_value_listener, include_ids = True))
+
+        #--------------------------------------------------------------------------------
+        # TouchLive patch: chain-aware device addressing
+        # Path = [topDeviceIndex, chainIndex, nestedDeviceIndex, ...] alternating
+        # device/chain levels (racks expose .chains, chains expose .devices).
+        #--------------------------------------------------------------------------------
+        def resolve_device(track_index, path):
+            device = self.song.tracks[track_index].devices[path[0]]
+            for idx in path[1:]:
+                if hasattr(device, "chains"):
+                    device = device.chains[idx]
+                else:
+                    device = device.devices[idx]
+            return device
+
+        def path_callback(extra_args, func):
+            def wrapper(params: Tuple[Any]):
+                track_index = int(params[0])
+                path = tuple(int(p) for p in params[1:len(params) - extra_args]) if extra_args > 0 else tuple(int(p) for p in params[1:])
+                device = resolve_device(track_index, path)
+                args = params[len(params) - extra_args:] if extra_args > 0 else ()
+                rv = func(device, args)
+                if rv is None:
+                    return (track_index, *path)
+                return (track_index, *path, *rv)
+            return wrapper
+
+        def path_get_parameters_name(device, args):
+            return tuple(parameter.name for parameter in device.parameters)
+
+        def path_get_parameters_value(device, args):
+            return tuple(parameter.value for parameter in device.parameters)
+
+        def path_get_parameters_min(device, args):
+            return tuple(parameter.min for parameter in device.parameters)
+
+        def path_get_parameters_max(device, args):
+            return tuple(parameter.max for parameter in device.parameters)
+
+        def path_get_name(device, args):
+            return (device.name,)
+
+        def path_set_parameter_value(device, args):
+            param_index, param_value = args[:2]
+            device.parameters[int(param_index)].value = param_value
+
+        def path_get_parameter_value(device, args):
+            param_index = int(args[0])
+            return param_index, device.parameters[param_index].value
+
+        def path_parameter_value_listener(params: Tuple[Any]):
+            track_index = int(params[0])
+            path = tuple(int(p) for p in params[1:-1])
+            param_index = int(params[-1])
+            device = resolve_device(track_index, path)
+
+            def property_changed_callback():
+                value = device.parameters[param_index].value
+                self.osc_server.send("/live/device/path/get/parameter/value", (track_index, *path, param_index, value))
+
+            listener_key = ('device_path_parameter_value', (track_index, path, param_index))
+            if listener_key in self.listener_functions:
+                path_parameter_remove_value_listener(params)
+
+            device.parameters[param_index].add_value_listener(property_changed_callback)
+            self.listener_functions[listener_key] = property_changed_callback
+            property_changed_callback()
+
+        def path_parameter_remove_value_listener(params: Tuple[Any]):
+            track_index = int(params[0])
+            path = tuple(int(p) for p in params[1:-1])
+            param_index = int(params[-1])
+            listener_key = ('device_path_parameter_value', (track_index, path, param_index))
+            if listener_key in self.listener_functions:
+                listener_function = self.listener_functions[listener_key]
+                resolve_device(track_index, path).parameters[param_index].remove_value_listener(listener_function)
+                del self.listener_functions[listener_key]
+            else:
+                self.logger.warning("No path listener found for: %s" % str(params))
+
+        self.osc_server.add_handler("/live/device/path/get/parameters/name", path_callback(0, path_get_parameters_name))
+        self.osc_server.add_handler("/live/device/path/get/parameters/value", path_callback(0, path_get_parameters_value))
+        self.osc_server.add_handler("/live/device/path/get/parameters/min", path_callback(0, path_get_parameters_min))
+        self.osc_server.add_handler("/live/device/path/get/parameters/max", path_callback(0, path_get_parameters_max))
+        self.osc_server.add_handler("/live/device/path/get/name", path_callback(0, path_get_name))
+        self.osc_server.add_handler("/live/device/path/set/parameter/value", path_callback(2, path_set_parameter_value))
+        self.osc_server.add_handler("/live/device/path/get/parameter/value", path_callback(1, path_get_parameter_value))
+        self.osc_server.add_handler("/live/device/path/start_listen/parameter/value", path_parameter_value_listener)
+        self.osc_server.add_handler("/live/device/path/stop_listen/parameter/value", path_parameter_remove_value_listener)
