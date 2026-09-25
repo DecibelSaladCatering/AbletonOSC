@@ -1,6 +1,7 @@
 from typing import Tuple, Any
 from .handler import AbletonOSCHandler
 
+
 class DeviceHandler(AbletonOSCHandler):
     def __init__(self, manager):
         super().__init__(manager)
@@ -11,7 +12,7 @@ class DeviceHandler(AbletonOSCHandler):
             def device_callback(params: Tuple[Any]):
                 track_index, device_index = int(params[0]), int(params[1])
                 device = self.song.tracks[track_index].devices[device_index]
-                if (include_ids):
+                if include_ids:
                     rv = func(device, *args, params[0:])
                 else:
                     rv = func(device, *args, params[2:])
@@ -21,36 +22,46 @@ class DeviceHandler(AbletonOSCHandler):
 
             return device_callback
 
-        methods = [
-        ]
+        methods = []
         properties_r = [
             "class_name",
             "name",
-            "type"
+            "type",
+            # TouchLive patch (round 4): observable on/off state of the device.
+            "is_active",
         ]
-        properties_rw = [
-        ]
+        properties_rw = []
 
         for method in methods:
-            self.osc_server.add_handler("/live/device/%s" % method,
-                                        create_device_callback(self._call_method, method))
+            self.osc_server.add_handler(
+                "/live/device/%s" % method,
+                create_device_callback(self._call_method, method),
+            )
 
         for prop in properties_r + properties_rw:
-            self.osc_server.add_handler("/live/device/get/%s" % prop,
-                                        create_device_callback(self._get_property, prop))
-            self.osc_server.add_handler("/live/device/start_listen/%s" % prop,
-                                        create_device_callback(self._start_listen, prop))
-            self.osc_server.add_handler("/live/device/stop_listen/%s" % prop,
-                                        create_device_callback(self._stop_listen, prop))
+            self.osc_server.add_handler(
+                "/live/device/get/%s" % prop,
+                create_device_callback(self._get_property, prop),
+            )
+            self.osc_server.add_handler(
+                "/live/device/start_listen/%s" % prop,
+                create_device_callback(self._start_listen, prop),
+            )
+            self.osc_server.add_handler(
+                "/live/device/stop_listen/%s" % prop,
+                create_device_callback(self._stop_listen, prop),
+            )
         for prop in properties_rw:
-            self.osc_server.add_handler("/live/device/set/%s" % prop,
-                                        create_device_callback(self._set_property, prop))
+            self.osc_server.add_handler(
+                "/live/device/set/%s" % prop,
+                create_device_callback(self._set_property, prop),
+            )
 
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         # Device: Get/set parameter lists
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         def device_get_num_parameters(device, params: Tuple[Any] = ()):
-            return len(device.parameters),
+            return (len(device.parameters),)
 
         def device_get_parameters_name(device, params: Tuple[Any] = ()):
             return tuple(parameter.name for parameter in device.parameters)
@@ -71,59 +82,111 @@ class DeviceHandler(AbletonOSCHandler):
             for index, value in enumerate(params):
                 device.parameters[index].value = value
 
-        self.osc_server.add_handler("/live/device/get/num_parameters", create_device_callback(device_get_num_parameters))
-        self.osc_server.add_handler("/live/device/get/parameters/name", create_device_callback(device_get_parameters_name))
-        self.osc_server.add_handler("/live/device/get/parameters/value", create_device_callback(device_get_parameters_value))
-        self.osc_server.add_handler("/live/device/get/parameters/min", create_device_callback(device_get_parameters_min))
-        self.osc_server.add_handler("/live/device/get/parameters/max", create_device_callback(device_get_parameters_max))
-        self.osc_server.add_handler("/live/device/get/parameters/is_quantized", create_device_callback(device_get_parameters_is_quantized))
-        self.osc_server.add_handler("/live/device/set/parameters/value", create_device_callback(device_set_parameters_value))
+        self.osc_server.add_handler(
+            "/live/device/get/num_parameters",
+            create_device_callback(device_get_num_parameters),
+        )
+        self.osc_server.add_handler(
+            "/live/device/get/parameters/name",
+            create_device_callback(device_get_parameters_name),
+        )
+        self.osc_server.add_handler(
+            "/live/device/get/parameters/value",
+            create_device_callback(device_get_parameters_value),
+        )
+        self.osc_server.add_handler(
+            "/live/device/get/parameters/min",
+            create_device_callback(device_get_parameters_min),
+        )
+        self.osc_server.add_handler(
+            "/live/device/get/parameters/max",
+            create_device_callback(device_get_parameters_max),
+        )
+        self.osc_server.add_handler(
+            "/live/device/get/parameters/is_quantized",
+            create_device_callback(device_get_parameters_is_quantized),
+        )
+        self.osc_server.add_handler(
+            "/live/device/set/parameters/value",
+            create_device_callback(device_set_parameters_value),
+        )
 
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         # Device: Get/set individual parameters
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         def device_get_parameter_value(device, params: Tuple[Any] = ()):
             # Cast to ints so that we can tolerate floats from interfaces such as TouchOSC
             # that send floats by default.
             # https://github.com/ideoforms/AbletonOSC/issues/33
             param_index = int(params[0])
             return param_index, device.parameters[param_index].value
-        
+
         # Uses str_for_value method to return the UI-friendly version of a parameter value (ex: "2500 Hz")
         def device_get_parameter_value_string(device, params: Tuple[Any] = ()):
             param_index = int(params[0])
-            return param_index, device.parameters[param_index].str_for_value(device.parameters[param_index].value)
-        
+            return param_index, device.parameters[param_index].str_for_value(
+                device.parameters[param_index].value
+            )
+
         def device_get_parameter_value_listener(device, params: Tuple[Any] = ()):
 
             def property_changed_callback():
                 value = device.parameters[params[2]].value
-                self.logger.info("Property %s changed of %s %s: %s" % ('value', 'device parameter', str(params), value))
-                self.osc_server.send("/live/device/get/parameter/value", (*params, value,))
+                self.logger.info(
+                    "Property %s changed of %s %s: %s"
+                    % ("value", "device parameter", str(params), value)
+                )
+                self.osc_server.send(
+                    "/live/device/get/parameter/value",
+                    (
+                        *params,
+                        value,
+                    ),
+                )
 
-                value_string = device.parameters[params[2]].str_for_value(device.parameters[params[2]].value)
-                self.logger.info("Property %s changed of %s %s: %s" % ('value_string', 'device parameter', str(params), value_string))
-                self.osc_server.send("/live/device/get/parameter/value_string", (*params, value_string,))
+                value_string = device.parameters[params[2]].str_for_value(
+                    device.parameters[params[2]].value
+                )
+                self.logger.info(
+                    "Property %s changed of %s %s: %s"
+                    % ("value_string", "device parameter", str(params), value_string)
+                )
+                self.osc_server.send(
+                    "/live/device/get/parameter/value_string",
+                    (
+                        *params,
+                        value_string,
+                    ),
+                )
 
-            listener_key = ('device_parameter_value', tuple(params))
+            listener_key = ("device_parameter_value", tuple(params))
             if listener_key in self.listener_functions:
-               device_get_parameter_remove_value_listener(device, params)
+                device_get_parameter_remove_value_listener(device, params)
 
-            self.logger.info("Adding listener for %s %s, property: %s" % ('device parameter', str(params), 'value'))
+            self.logger.info(
+                "Adding listener for %s %s, property: %s"
+                % ("device parameter", str(params), "value")
+            )
             device.parameters[params[2]].add_value_listener(property_changed_callback)
             self.listener_functions[listener_key] = property_changed_callback
 
             property_changed_callback()
 
         def device_get_parameter_remove_value_listener(device, params: Tuple[Any] = ()):
-            listener_key = ('device_parameter_value', tuple(params))
+            listener_key = ("device_parameter_value", tuple(params))
             if listener_key in self.listener_functions:
-                self.logger.info("Removing listener for %s %s, property %s" % (self.class_identifier, str(params), 'value'))
+                self.logger.info(
+                    "Removing listener for %s %s, property %s"
+                    % (self.class_identifier, str(params), "value")
+                )
                 listener_function = self.listener_functions[listener_key]
                 device.parameters[params[2]].remove_value_listener(listener_function)
                 del self.listener_functions[listener_key]
             else:
-                self.logger.warning("No listener function found for property: %s (%s)" % (prop, str(params)))
+                self.logger.warning(
+                    "No listener function found for property: %s (%s)"
+                    % (prop, str(params))
+                )
 
         def device_set_parameter_value(device, params: Tuple[Any] = ()):
             param_index, param_value = params[:2]
@@ -134,18 +197,162 @@ class DeviceHandler(AbletonOSCHandler):
             param_index = int(params[0])
             return param_index, device.parameters[param_index].name
 
-        self.osc_server.add_handler("/live/device/get/parameter/value", create_device_callback(device_get_parameter_value))
-        self.osc_server.add_handler("/live/device/get/parameter/value_string", create_device_callback(device_get_parameter_value_string))
-        self.osc_server.add_handler("/live/device/set/parameter/value", create_device_callback(device_set_parameter_value))
-        self.osc_server.add_handler("/live/device/get/parameter/name", create_device_callback(device_get_parameter_name))
-        self.osc_server.add_handler("/live/device/start_listen/parameter/value", create_device_callback(device_get_parameter_value_listener, include_ids = True))
-        self.osc_server.add_handler("/live/device/stop_listen/parameter/value", create_device_callback(device_get_parameter_remove_value_listener, include_ids = True))
+        self.osc_server.add_handler(
+            "/live/device/get/parameter/value",
+            create_device_callback(device_get_parameter_value),
+        )
+        self.osc_server.add_handler(
+            "/live/device/get/parameter/value_string",
+            create_device_callback(device_get_parameter_value_string),
+        )
+        self.osc_server.add_handler(
+            "/live/device/set/parameter/value",
+            create_device_callback(device_set_parameter_value),
+        )
+        self.osc_server.add_handler(
+            "/live/device/get/parameter/name",
+            create_device_callback(device_get_parameter_name),
+        )
+        self.osc_server.add_handler(
+            "/live/device/start_listen/parameter/value",
+            create_device_callback(
+                device_get_parameter_value_listener, include_ids=True
+            ),
+        )
+        self.osc_server.add_handler(
+            "/live/device/stop_listen/parameter/value",
+            create_device_callback(
+                device_get_parameter_remove_value_listener, include_ids=True
+            ),
+        )
 
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
+        # TouchLive patch (round 4): parameter metadata + device properties.
+        # Tolerant guards throughout: an exception inside a handler means the caller
+        # receives no reply at all (see OSCServer.process), so these must never raise.
+        # --------------------------------------------------------------------------------
+        def parameter_value_items(parameter):
+            # (count, *items); count 0 when not quantized or unreadable (tolerant, not an error).
+            try:
+                if not parameter.is_quantized:
+                    return (0,)
+                items = tuple(parameter.value_items)
+            except Exception:
+                return (0,)
+            return (len(items), *items)
+
+        def parameter_default_value(parameter):
+            # -1.0 sentinel: the LOM only defines default_value for non-quantized params.
+            try:
+                if parameter.is_quantized:
+                    return -1.0
+                default = parameter.default_value
+            except Exception:
+                return -1.0
+            return default if default is not None else -1.0
+
+        def parameter_is_enabled(parameter):
+            # 1/0; assume enabled when the attribute is missing or unreadable.
+            if not hasattr(parameter, "is_enabled"):
+                return 1
+            try:
+                return 1 if parameter.is_enabled else 0
+            except Exception:
+                return 1
+
+        def parameter_value_string(parameter):
+            # str_for_value with a plain str(value) fallback for odd parameters.
+            try:
+                text = parameter.str_for_value(parameter.value)
+            except Exception:
+                text = None
+            return text if text is not None else str(parameter.value)
+
+        def device_get_parameter_value_items(device, params: Tuple[Any] = ()):
+            param_index = int(params[0])
+            return param_index, *parameter_value_items(device.parameters[param_index])
+
+        def device_get_parameters_default_value(device, params: Tuple[Any] = ()):
+            return tuple(
+                parameter_default_value(parameter) for parameter in device.parameters
+            )
+
+        def device_get_parameters_is_enabled(device, params: Tuple[Any] = ()):
+            return tuple(
+                parameter_is_enabled(parameter) for parameter in device.parameters
+            )
+
+        def device_get_class_display_name(device, params: Tuple[Any] = ()):
+            return (getattr(device, "class_display_name", device.class_name),)
+
+        def device_get_bank_count(device, params: Tuple[Any] = ()):
+            # MaxDevice only; everything else (or an error) answers 0.
+            if not hasattr(device, "get_bank_count"):
+                return (0,)
+            try:
+                return (int(device.get_bank_count()),)
+            except Exception:
+                return (0,)
+
+        def device_get_bank_name(device, params: Tuple[Any] = ()):
+            # bank -1 = "Best of" (passed straight through to the LOM getter).
+            bank_index = int(params[0])
+            if not hasattr(device, "get_bank_name"):
+                return bank_index, ""
+            try:
+                return bank_index, device.get_bank_name(bank_index)
+            except Exception:
+                return bank_index, ""
+
+        def device_get_bank_parameters(device, params: Tuple[Any] = ()):
+            # Empty bank slots come back as -1; pass them through.
+            bank_index = int(params[0])
+            if not hasattr(device, "get_bank_parameters"):
+                return (bank_index,)
+            try:
+                return (
+                    bank_index,
+                    *tuple(
+                        int(index) for index in device.get_bank_parameters(bank_index)
+                    ),
+                )
+            except Exception:
+                return (bank_index,)
+
+        self.osc_server.add_handler(
+            "/live/device/get/parameter/value_items",
+            create_device_callback(device_get_parameter_value_items),
+        )
+        self.osc_server.add_handler(
+            "/live/device/get/parameters/default_value",
+            create_device_callback(device_get_parameters_default_value),
+        )
+        self.osc_server.add_handler(
+            "/live/device/get/parameters/is_enabled",
+            create_device_callback(device_get_parameters_is_enabled),
+        )
+        # class_display_name is get-only: it has no listener, so it is registered
+        # manually instead of going through properties_r.
+        self.osc_server.add_handler(
+            "/live/device/get/class_display_name",
+            create_device_callback(device_get_class_display_name),
+        )
+        self.osc_server.add_handler(
+            "/live/device/get/bank_count", create_device_callback(device_get_bank_count)
+        )
+        self.osc_server.add_handler(
+            "/live/device/get/bank_name", create_device_callback(device_get_bank_name)
+        )
+        self.osc_server.add_handler(
+            "/live/device/get/bank_parameters",
+            create_device_callback(device_get_bank_parameters),
+        )
+
+        # --------------------------------------------------------------------------------
         # TouchLive patch: chain-aware device addressing
         # Path = [topDeviceIndex, chainIndex, nestedDeviceIndex, ...] alternating
         # device/chain levels (racks expose .chains, chains expose .devices).
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         def resolve_device(track_index, path):
             device = self.song.tracks[track_index].devices[path[0]]
             for idx in path[1:]:
@@ -158,13 +365,18 @@ class DeviceHandler(AbletonOSCHandler):
         def path_callback(extra_args, func):
             def wrapper(params: Tuple[Any]):
                 track_index = int(params[0])
-                path = tuple(int(p) for p in params[1:len(params) - extra_args]) if extra_args > 0 else tuple(int(p) for p in params[1:])
+                path = (
+                    tuple(int(p) for p in params[1 : len(params) - extra_args])
+                    if extra_args > 0
+                    else tuple(int(p) for p in params[1:])
+                )
                 device = resolve_device(track_index, path)
-                args = params[len(params) - extra_args:] if extra_args > 0 else ()
+                args = params[len(params) - extra_args :] if extra_args > 0 else ()
                 rv = func(device, args)
                 if rv is None:
                     return (track_index, *path)
                 return (track_index, *path, *rv)
+
             return wrapper
 
         def path_get_parameters_name(device, args):
@@ -178,6 +390,28 @@ class DeviceHandler(AbletonOSCHandler):
 
         def path_get_parameters_max(device, args):
             return tuple(parameter.max for parameter in device.parameters)
+
+        def path_get_parameters_is_quantized(device, args):
+            return tuple(parameter.is_quantized for parameter in device.parameters)
+
+        def path_get_parameters_default_value(device, args):
+            return tuple(
+                parameter_default_value(parameter) for parameter in device.parameters
+            )
+
+        def path_get_parameters_is_enabled(device, args):
+            return tuple(
+                parameter_is_enabled(parameter) for parameter in device.parameters
+            )
+
+        def path_get_parameters_value_string(device, args):
+            return tuple(
+                parameter_value_string(parameter) for parameter in device.parameters
+            )
+
+        def path_get_parameter_value_items(device, args):
+            param_index = int(args[0])
+            return param_index, *parameter_value_items(device.parameters[param_index])
 
         def path_get_name(device, args):
             return (device.name,)
@@ -197,10 +431,22 @@ class DeviceHandler(AbletonOSCHandler):
             device = resolve_device(track_index, path)
 
             def property_changed_callback():
-                value = device.parameters[param_index].value
-                self.osc_server.send("/live/device/path/get/parameter/value", (track_index, *path, param_index, value))
+                parameter = device.parameters[param_index]
+                self.osc_server.send(
+                    "/live/device/path/get/parameter/value",
+                    (track_index, *path, param_index, parameter.value),
+                )
+                # TouchLive patch (round 4): value string travels with the value push.
+                value_string = parameter_value_string(parameter)
+                self.osc_server.send(
+                    "/live/device/path/get/parameter/value_string",
+                    (track_index, *path, param_index, value_string),
+                )
 
-            listener_key = ('device_path_parameter_value', (track_index, path, param_index))
+            listener_key = (
+                "device_path_parameter_value",
+                (track_index, path, param_index),
+            )
             if listener_key in self.listener_functions:
                 path_parameter_remove_value_listener(params)
 
@@ -213,21 +459,72 @@ class DeviceHandler(AbletonOSCHandler):
             track_index = int(params[0])
             path = tuple(int(p) for p in params[1:-1])
             param_index = int(params[-1])
-            listener_key = ('device_path_parameter_value', (track_index, path, param_index))
+            listener_key = (
+                "device_path_parameter_value",
+                (track_index, path, param_index),
+            )
             if listener_key in self.listener_functions:
                 listener_function = self.listener_functions[listener_key]
-                resolve_device(track_index, path).parameters[param_index].remove_value_listener(listener_function)
+                resolve_device(track_index, path).parameters[
+                    param_index
+                ].remove_value_listener(listener_function)
                 del self.listener_functions[listener_key]
                 del self.listener_objects[listener_key]
             else:
                 self.logger.warning("No path listener found for: %s" % str(params))
 
-        self.osc_server.add_handler("/live/device/path/get/parameters/name", path_callback(0, path_get_parameters_name))
-        self.osc_server.add_handler("/live/device/path/get/parameters/value", path_callback(0, path_get_parameters_value))
-        self.osc_server.add_handler("/live/device/path/get/parameters/min", path_callback(0, path_get_parameters_min))
-        self.osc_server.add_handler("/live/device/path/get/parameters/max", path_callback(0, path_get_parameters_max))
-        self.osc_server.add_handler("/live/device/path/get/name", path_callback(0, path_get_name))
-        self.osc_server.add_handler("/live/device/path/set/parameter/value", path_callback(2, path_set_parameter_value))
-        self.osc_server.add_handler("/live/device/path/get/parameter/value", path_callback(1, path_get_parameter_value))
-        self.osc_server.add_handler("/live/device/path/start_listen/parameter/value", path_parameter_value_listener)
-        self.osc_server.add_handler("/live/device/path/stop_listen/parameter/value", path_parameter_remove_value_listener)
+        self.osc_server.add_handler(
+            "/live/device/path/get/parameters/name",
+            path_callback(0, path_get_parameters_name),
+        )
+        self.osc_server.add_handler(
+            "/live/device/path/get/parameters/value",
+            path_callback(0, path_get_parameters_value),
+        )
+        self.osc_server.add_handler(
+            "/live/device/path/get/parameters/min",
+            path_callback(0, path_get_parameters_min),
+        )
+        self.osc_server.add_handler(
+            "/live/device/path/get/parameters/max",
+            path_callback(0, path_get_parameters_max),
+        )
+        self.osc_server.add_handler(
+            "/live/device/path/get/parameters/is_quantized",
+            path_callback(0, path_get_parameters_is_quantized),
+        )
+        self.osc_server.add_handler(
+            "/live/device/path/get/parameters/default_value",
+            path_callback(0, path_get_parameters_default_value),
+        )
+        self.osc_server.add_handler(
+            "/live/device/path/get/parameters/is_enabled",
+            path_callback(0, path_get_parameters_is_enabled),
+        )
+        self.osc_server.add_handler(
+            "/live/device/path/get/parameters/value_string",
+            path_callback(0, path_get_parameters_value_string),
+        )
+        self.osc_server.add_handler(
+            "/live/device/path/get/parameter/value_items",
+            path_callback(1, path_get_parameter_value_items),
+        )
+        self.osc_server.add_handler(
+            "/live/device/path/get/name", path_callback(0, path_get_name)
+        )
+        self.osc_server.add_handler(
+            "/live/device/path/set/parameter/value",
+            path_callback(2, path_set_parameter_value),
+        )
+        self.osc_server.add_handler(
+            "/live/device/path/get/parameter/value",
+            path_callback(1, path_get_parameter_value),
+        )
+        self.osc_server.add_handler(
+            "/live/device/path/start_listen/parameter/value",
+            path_parameter_value_listener,
+        )
+        self.osc_server.add_handler(
+            "/live/device/path/stop_listen/parameter/value",
+            path_parameter_remove_value_listener,
+        )
