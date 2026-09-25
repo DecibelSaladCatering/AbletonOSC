@@ -100,9 +100,11 @@ class TrackHandler(AbletonOSCHandler):
 
         #--------------------------------------------------------------------------------
         # TouchLive patch (round 6): pan mode + real mixer defaults.
-        # panning_mode is a plain MixerDevice int property (0 = Stereo,
-        # 1 = Split Stereo, 2 = Split Mono as seen on 12.4.6); the reset values
-        # come from DeviceParameter.default_value — what double-click uses.
+        # panning_mode is a plain MixerDevice int property: 0 = Stereo, 1 = the
+        # split mode (UI label "Split Stereo"/"Split Mono" depends on the
+        # track's source; 12.4.6 rejects 2 with "Invalid panning mode!").
+        # The reset values come from DeviceParameter.default_value — what
+        # double-click uses.
         #--------------------------------------------------------------------------------
         def track_get_panning_mode(track, _=()):
             return int(track.mixer_device.panning_mode),
