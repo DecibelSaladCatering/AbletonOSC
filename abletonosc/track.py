@@ -110,30 +110,27 @@ class TrackHandler(AbletonOSCHandler):
         def track_set_panning_mode(track, params: Tuple[Any] = ()):
             track.mixer_device.panning_mode = int(params[0])
 
-        def track_panning_mode_listener(params: Tuple[Any] = ()):
+        def track_panning_mode_listener(track, params: Optional[Tuple[Any]] = ()):
             track_index, = params
-            track = self.song.tracks[track_index]
 
             def property_changed_callback():
                 self.osc_server.send("/live/track/get/panning_mode",
                                      (track_index, int(track.mixer_device.panning_mode),))
 
-            listener_key = ("track_panning_mode", (track_index,))
+            listener_key = ("panning_mode", tuple(params))
             if listener_key in self.listener_functions:
-                track_panning_mode_remove_listener(params)
+                track_panning_mode_remove_listener(track, params)
 
             track.mixer_device.add_panning_mode_listener(property_changed_callback)
             self.listener_functions[listener_key] = property_changed_callback
             self.listener_objects[listener_key] = track.mixer_device
             property_changed_callback()
 
-        def track_panning_mode_remove_listener(params: Tuple[Any] = ()):
-            track_index, = params
-            listener_key = ("track_panning_mode", (track_index,))
+        def track_panning_mode_remove_listener(track, params: Optional[Tuple[Any]] = ()):
+            listener_key = ("panning_mode", tuple(params))
             if listener_key in self.listener_functions:
                 listener_function = self.listener_functions[listener_key]
-                self.song.tracks[track_index].mixer_device.remove_panning_mode_listener(
-                    listener_function)
+                track.mixer_device.remove_panning_mode_listener(listener_function)
                 del self.listener_functions[listener_key]
                 del self.listener_objects[listener_key]
 
