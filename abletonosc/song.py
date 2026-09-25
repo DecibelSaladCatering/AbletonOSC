@@ -20,17 +20,25 @@ def _track_for_device(device, song):
     return None
 
 def _device_path_for(device, track):
-    """Chain-aware path [topDevice, chain, nestedDevice, ...] to `device`."""
+    """Chain-aware path [topDevice, chain, nestedDevice, ...] to `device`.
+
+    Guarded walk: mixer devices (and other objects not present in
+    `devices`/`chains`) raise ValueError — treat as "nothing addressable"
+    and return None instead of erroring the handler.
+    """
     path = []
     obj = device
     while obj != track:
         parent = obj.canonical_parent
         if parent is None:
             return None
-        if hasattr(parent, "devices"):
-            path.insert(0, list(parent.devices).index(obj))
-        else:
-            path.insert(0, list(parent.chains).index(obj))
+        try:
+            if hasattr(parent, "devices"):
+                path.insert(0, list(parent.devices).index(obj))
+            else:
+                path.insert(0, list(parent.chains).index(obj))
+        except ValueError:
+            return None
         obj = parent
     return tuple(path)
 
