@@ -79,6 +79,15 @@ class TrackHandler(AbletonOSCHandler):
         # can't be formulated as normal callbacks that reference properties of track.
         #--------------------------------------------------------------------------------
         mixer_properties_rw = ["volume", "panning"]
+        # TouchLive patch (round 6): split-stereo/mono pan parameters are
+        # DeviceParameters on the mixer device just like volume/panning.
+        try:
+            _probe_mixer = self.song.tracks[0].mixer_device
+            if hasattr(_probe_mixer, "left_split_stereo"):
+                mixer_properties_rw.append("left_split_stereo")
+                mixer_properties_rw.append("right_split_stereo")
+        except Exception:
+            self.logger.warning("Split stereo pan parameters not available")
         for prop in mixer_properties_rw:
             self.osc_server.add_handler("/live/track/get/%s" % prop,
                                         create_track_callback(self._get_mixer_property, prop))
@@ -88,6 +97,75 @@ class TrackHandler(AbletonOSCHandler):
                                         create_track_callback(self._start_mixer_listen, prop, include_track_id=True))
             self.osc_server.add_handler("/live/track/stop_listen/%s" % prop,
                                         create_track_callback(self._stop_mixer_listen, prop, include_track_id=True))
+
+        #--------------------------------------------------------------------------------
+        # TouchLive patch (round 6): pan mode + real mixer defaults.
+        # panning_mode is a plain MixerDevice int property (0 = Stereo,
+        # 1 = Split Stereo, 2 = Split Mono as seen on 12.4.6); the reset values
+        # come from DeviceParameter.default_value — what double-click uses.
+        #--------------------------------------------------------------------------------
+        def track_get_panning_mode(track, _=()):
+            return int(track.mixer_device.panning_mode),
+
+        def track_set_panning_mode(track, params: Tuple[Any] = ()):
+            track.mixer_device.panning_mode = int(params[0])
+
+        def track_panning_mode_listener(params: Tuple[Any] = ()):
+            track_index, = params
+            track = self.song.tracks[track_index]
+
+            def property_changed_callback():
+                self.osc_server.send("/live/track/get/panning_mode",
+                                     (track_index, int(track.mixer_device.panning_mode),))
+
+            listener_key = ("track_panning_mode", (track_index,))
+            if listener_key in self.listener_functions:
+                track_panning_mode_remove_listener(params)
+
+            track.mixer_device.add_panning_mode_listener(property_changed_callback)
+            self.listener_functions[listener_key] = property_changed_callback
+            self.listener_objects[listener_key] = track.mixer_device
+            property_changed_callback()
+
+        def track_panning_mode_remove_listener(params: Tuple[Any] = ()):
+            track_index, = params
+            listener_key = ("track_panning_mode", (track_index,))
+            if listener_key in self.listener_functions:
+                listener_function = self.listener_functions[listener_key]
+                self.song.tracks[track_index].mixer_device.remove_panning_mode_listener(
+                    listener_function)
+                del self.listener_functions[listener_key]
+                del self.listener_objects[listener_key]
+
+        self.osc_server.add_handler("/live/track/get/panning_mode",
+                                    create_track_callback(track_get_panning_mode))
+        self.osc_server.add_handler("/live/track/set/panning_mode",
+                                    create_track_callback(track_set_panning_mode))
+        self.osc_server.add_handler("/live/track/start_listen/panning_mode",
+                                    create_track_callback(track_panning_mode_listener, include_track_id=True))
+        self.osc_server.add_handler("/live/track/stop_listen/panning_mode",
+                                    create_track_callback(track_panning_mode_remove_listener, include_track_id=True))
+
+        def track_get_mixer_defaults(track, _=()):
+            mixer = track.mixer_device
+            def default_of(prop):
+                param = getattr(mixer, prop, None)
+                if param is None:
+                    return -1.0
+                try:
+                    return param.default_value
+                except Exception:
+                    return -1.0
+            return (
+                default_of("volume"),
+                default_of("panning"),
+                default_of("left_split_stereo"),
+                default_of("right_split_stereo"),
+                *(default_of_send.default_value for default_of_send in mixer.sends),
+            )
+
+        self.osc_server.add_handler("/live/track/get/mixer_defaults",
+                                    create_track_callback(track_get_mixer_defaults))
 
         # Still need to fix these
         # Might want to find a better approach that unifies volume and sends

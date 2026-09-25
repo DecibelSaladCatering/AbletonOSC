@@ -2,6 +2,7 @@ from functools import partial
 from typing import Optional, Tuple, Any
 from .handler import AbletonOSCHandler
 
+
 class ViewHandler(AbletonOSCHandler):
     def __init__(self, manager):
         super().__init__(manager)
@@ -46,9 +47,9 @@ class ViewHandler(AbletonOSCHandler):
                 return (track_index, -1)
             return (track_index, device_index)
 
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         # TouchLive patch: nested-safe selected-device info (path from canonical parents)
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         def _device_path_for(device, track):
             # Guarded walk: mixer devices (and other objects not present in
             # `devices`/`chains`) raise ValueError — treat as "nothing
@@ -77,7 +78,12 @@ class ViewHandler(AbletonOSCHandler):
             path = _device_path_for(device, track)
             if path is None:
                 return None
-            return (list(self.song.tracks).index(track), *path, device.class_name, device.name)
+            return (
+                list(self.song.tracks).index(track),
+                *path,
+                device.class_name,
+                device.name,
+            )
 
         def get_selected_device_info(params: Optional[Tuple] = ()):
             return selected_device_info()
@@ -93,8 +99,12 @@ class ViewHandler(AbletonOSCHandler):
                 device_key = ("selected_device_info", ())
                 if device_key in self.listener_functions:
                     old_callback = self.listener_functions[device_key]
-                    self.song.view.selected_track.view.remove_selected_device_listener(old_callback)
-                self.song.view.selected_track.view.add_selected_device_listener(device_changed)
+                    self.song.view.selected_track.view.remove_selected_device_listener(
+                        old_callback
+                    )
+                self.song.view.selected_track.view.add_selected_device_listener(
+                    device_changed
+                )
                 self.listener_functions[device_key] = device_changed
                 self.listener_objects[device_key] = self.song.view.selected_track.view
                 device_changed()
@@ -110,18 +120,22 @@ class ViewHandler(AbletonOSCHandler):
             device_key = ("selected_device_info", ())
             if device_key in self.listener_functions:
                 old_callback = self.listener_functions[device_key]
-                self.song.view.selected_track.view.remove_selected_device_listener(old_callback)
+                self.song.view.selected_track.view.remove_selected_device_listener(
+                    old_callback
+                )
                 del self.listener_functions[device_key]
                 del self.listener_objects[device_key]
             track_key = ("selected_device_track_hook", ())
             if track_key in self.listener_functions:
-                self.song.view.remove_selected_track_listener(self.listener_functions[track_key])
+                self.song.view.remove_selected_track_listener(
+                    self.listener_functions[track_key]
+                )
                 del self.listener_functions[track_key]
                 del self.listener_objects[track_key]
 
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         # TouchLive patch: selected-parameter capture (mapping pathway)
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         def _track_for_device(device):
             obj = device
             while obj is not None:
@@ -150,8 +164,13 @@ class ViewHandler(AbletonOSCHandler):
             except ValueError:
                 return None
             return (
-                list(self.song.tracks).index(track), *path, param_index,
-                param.name, param.value, param.min, param.max,
+                list(self.song.tracks).index(track),
+                *path,
+                param_index,
+                param.name,
+                param.value,
+                param.min,
+                param.max,
             )
 
         def get_selected_parameter(params: Optional[Tuple] = ()):
@@ -174,27 +193,68 @@ class ViewHandler(AbletonOSCHandler):
         def stop_listen_selected_parameter(params: Optional[Tuple] = ()):
             listener_key = ("selected_parameter_info", ())
             if listener_key in self.listener_functions:
-                self.song.view.remove_selected_parameter_listener(self.listener_functions[listener_key])
+                self.song.view.remove_selected_parameter_listener(
+                    self.listener_functions[listener_key]
+                )
                 del self.listener_functions[listener_key]
                 del self.listener_objects[listener_key]
 
         self.osc_server.add_handler("/live/view/get/selected_scene", get_selected_scene)
         self.osc_server.add_handler("/live/view/get/selected_track", get_selected_track)
         self.osc_server.add_handler("/live/view/get/selected_clip", get_selected_clip)
-        self.osc_server.add_handler("/live/view/get/selected_device", get_selected_device)
+        self.osc_server.add_handler(
+            "/live/view/get/selected_device", get_selected_device
+        )
         self.osc_server.add_handler("/live/view/set/selected_scene", set_selected_scene)
         self.osc_server.add_handler("/live/view/set/selected_track", set_selected_track)
         self.osc_server.add_handler("/live/view/set/selected_clip", set_selected_clip)
-        self.osc_server.add_handler("/live/view/set/selected_device", set_selected_device)
+        self.osc_server.add_handler(
+            "/live/view/set/selected_device", set_selected_device
+        )
 
-        self.osc_server.add_handler("/live/view/get/selected_device_info", get_selected_device_info)
-        self.osc_server.add_handler("/live/view/start_listen/selected_device", start_listen_selected_device)
-        self.osc_server.add_handler("/live/view/stop_listen/selected_device", stop_listen_selected_device)
-        self.osc_server.add_handler("/live/view/get/selected_parameter", get_selected_parameter)
-        self.osc_server.add_handler("/live/view/start_listen/selected_parameter", start_listen_selected_parameter)
-        self.osc_server.add_handler("/live/view/stop_listen/selected_parameter", stop_listen_selected_parameter)
+        self.osc_server.add_handler(
+            "/live/view/get/selected_device_info", get_selected_device_info
+        )
+        self.osc_server.add_handler(
+            "/live/view/start_listen/selected_device", start_listen_selected_device
+        )
+        self.osc_server.add_handler(
+            "/live/view/stop_listen/selected_device", stop_listen_selected_device
+        )
+        self.osc_server.add_handler(
+            "/live/view/get/selected_parameter", get_selected_parameter
+        )
+        self.osc_server.add_handler(
+            "/live/view/start_listen/selected_parameter",
+            start_listen_selected_parameter,
+        )
+        self.osc_server.add_handler(
+            "/live/view/stop_listen/selected_parameter", stop_listen_selected_parameter
+        )
 
-        self.osc_server.add_handler('/live/view/start_listen/selected_scene', partial(self._start_listen, self.song.view, "selected_scene", getter=get_selected_scene))
-        self.osc_server.add_handler('/live/view/start_listen/selected_track', partial(self._start_listen, self.song.view, "selected_track", getter=get_selected_track))
-        self.osc_server.add_handler('/live/view/stop_listen/selected_scene', partial(self._stop_listen, self.song.view, "selected_scene"))
-        self.osc_server.add_handler('/live/view/stop_listen/selected_track', partial(self._stop_listen, self.song.view, "selected_track"))
+        self.osc_server.add_handler(
+            "/live/view/start_listen/selected_scene",
+            partial(
+                self._start_listen,
+                self.song.view,
+                "selected_scene",
+                getter=get_selected_scene,
+            ),
+        )
+        self.osc_server.add_handler(
+            "/live/view/start_listen/selected_track",
+            partial(
+                self._start_listen,
+                self.song.view,
+                "selected_track",
+                getter=get_selected_track,
+            ),
+        )
+        self.osc_server.add_handler(
+            "/live/view/stop_listen/selected_scene",
+            partial(self._stop_listen, self.song.view, "selected_scene"),
+        )
+        self.osc_server.add_handler(
+            "/live/view/stop_listen/selected_track",
+            partial(self._stop_listen, self.song.view, "selected_track"),
+        )

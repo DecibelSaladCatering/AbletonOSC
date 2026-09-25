@@ -8,6 +8,7 @@ from typing import Tuple, Any
 
 from .handler import AbletonOSCHandler
 
+
 def _track_for_device(device, song):
     """Walk canonical_parent up to the Track containing `device`."""
     obj = device
@@ -18,6 +19,7 @@ def _track_for_device(device, song):
         except ValueError:
             obj = obj.canonical_parent
     return None
+
 
 def _device_path_for(device, track):
     """Chain-aware path [topDevice, chain, nestedDevice, ...] to `device`.
@@ -42,15 +44,16 @@ def _device_path_for(device, track):
         obj = parent
     return tuple(path)
 
+
 class SongHandler(AbletonOSCHandler):
     def __init__(self, manager):
         super().__init__(manager)
         self.class_identifier = "song"
 
     def init_api(self):
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         # Callbacks for Song: methods
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         for method in [
             "capture_and_insert_scene",
             "capture_midi",
@@ -76,14 +79,14 @@ class SongHandler(AbletonOSCHandler):
             "stop_playing",
             "tap_tempo",
             "trigger_session_record",
-            "undo"
+            "undo",
         ]:
             callback = partial(self._call_method, self.song, method)
             self.osc_server.add_handler("/live/song/%s" % method, callback)
 
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         # Callbacks for Song: properties (read/write)
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         properties_rw = [
             "arrangement_overdub",
             "back_to_arranger",
@@ -106,31 +109,43 @@ class SongHandler(AbletonOSCHandler):
             "session_record",
             "signature_denominator",
             "signature_numerator",
-            "tempo"
+            "tempo",
         ]
 
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         # Callbacks for Song: properties (read-only)
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         properties_r = [
             "can_redo",
             "can_undo",
             "is_playing",
             "song_length",
-            "session_record_status"
+            "session_record_status",
         ]
 
         for prop in properties_r + properties_rw:
-            self.osc_server.add_handler("/live/song/get/%s" % prop, partial(self._get_property, self.song, prop))
-            self.osc_server.add_handler("/live/song/start_listen/%s" % prop, partial(self._start_listen, self.song, prop))
-            self.osc_server.add_handler("/live/song/stop_listen/%s" % prop, partial(self._stop_listen, self.song, prop))
+            self.osc_server.add_handler(
+                "/live/song/get/%s" % prop, partial(self._get_property, self.song, prop)
+            )
+            self.osc_server.add_handler(
+                "/live/song/start_listen/%s" % prop,
+                partial(self._start_listen, self.song, prop),
+            )
+            self.osc_server.add_handler(
+                "/live/song/stop_listen/%s" % prop,
+                partial(self._stop_listen, self.song, prop),
+            )
         for prop in properties_rw:
-            self.osc_server.add_handler("/live/song/set/%s" % prop, partial(self._set_property, self.song, prop))
+            self.osc_server.add_handler(
+                "/live/song/set/%s" % prop, partial(self._set_property, self.song, prop)
+            )
 
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         # Callbacks for Song: Track properties
-        #--------------------------------------------------------------------------------
-        self.osc_server.add_handler("/live/song/get/num_tracks", lambda _: (len(self.song.tracks),))
+        # --------------------------------------------------------------------------------
+        self.osc_server.add_handler(
+            "/live/song/get/num_tracks", lambda _: (len(self.song.tracks),)
+        )
 
         def song_get_track_names(params):
             if len(params) == 0:
@@ -139,7 +154,11 @@ class SongHandler(AbletonOSCHandler):
                 track_index_min, track_index_max = params
                 if track_index_max == -1:
                     track_index_max = len(self.song.tracks)
-            return tuple(self.song.tracks[index].name for index in range(track_index_min, track_index_max))
+            return tuple(
+                self.song.tracks[index].name
+                for index in range(track_index_min, track_index_max)
+            )
+
         self.osc_server.add_handler("/live/song/get/track_names", song_get_track_names)
 
         def song_get_track_data(params):
@@ -159,8 +178,10 @@ class SongHandler(AbletonOSCHandler):
             track_index_min, track_index_max, *properties = params
             track_index_min = int(track_index_min)
             track_index_max = int(track_index_max)
-            self.logger.info("Getting track data: %s (tracks %d..%d)" %
-                             (properties, track_index_min, track_index_max))
+            self.logger.info(
+                "Getting track data: %s (tracks %d..%d)"
+                % (properties, track_index_min, track_index_max)
+            )
             if track_index_max == -1:
                 track_index_max = len(self.song.tracks)
             rv = []
@@ -174,9 +195,9 @@ class SongHandler(AbletonOSCHandler):
                         else:
                             value = getattr(track, property_name)
                             if isinstance(value, Live.Track.Track):
-                                #--------------------------------------------------------------------------------
+                                # --------------------------------------------------------------------------------
                                 # Map Track objects to their track_index to return via OSC
-                                #--------------------------------------------------------------------------------
+                                # --------------------------------------------------------------------------------
                                 value = list(self.song.tracks).index(value)
                         rv.append(value)
                     elif obj == "clip":
@@ -192,10 +213,12 @@ class SongHandler(AbletonOSCHandler):
                         for device in track.devices:
                             rv.append(getattr(device, property_name))
                     else:
-                        self.logger.error("Unknown object identifier in get/track_data: %s" % obj)
+                        self.logger.error(
+                            "Unknown object identifier in get/track_data: %s" % obj
+                        )
             return tuple(rv)
-        self.osc_server.add_handler("/live/song/get/track_data", song_get_track_data)
 
+        self.osc_server.add_handler("/live/song/get/track_data", song_get_track_data)
 
         def song_export_structure(params):
             tracks = []
@@ -209,7 +232,7 @@ class SongHandler(AbletonOSCHandler):
                     "is_foldable": track.is_foldable,
                     "group_track": group_track,
                     "clips": [],
-                    "devices": []
+                    "devices": [],
                 }
                 for clip_index, clip_slot in enumerate(track.clip_slots):
                     if clip_slot.clip:
@@ -225,58 +248,77 @@ class SongHandler(AbletonOSCHandler):
                         "class_name": device.class_name,
                         "type": device.type,
                         "name": device.name,
-                        "parameters": []
+                        "parameters": [],
                     }
                     for parameter in device.parameters:
-                        device_data["parameters"].append({
-                            "name": parameter.name,
-                            "value": parameter.value,
-                            "min": parameter.min,
-                            "max": parameter.max,
-                            "is_quantized": parameter.is_quantized,
-                        })
+                        device_data["parameters"].append(
+                            {
+                                "name": parameter.name,
+                                "value": parameter.value,
+                                "min": parameter.min,
+                                "max": parameter.max,
+                                "is_quantized": parameter.is_quantized,
+                            }
+                        )
                     track_data["devices"].append(device_data)
 
                 tracks.append(track_data)
-            song = {
-                "tracks": tracks
-            }
+            song = {"tracks": tracks}
 
             if sys.platform == "darwin":
-                #--------------------------------------------------------------------------------
+                # --------------------------------------------------------------------------------
                 # On macOS, TMPDIR by default points to a process-specific directory.
                 # We want to use a global temp dir (typically, tmp) so that other processes
                 # know where to find this output .json, so unset TMPDIR.
-                #--------------------------------------------------------------------------------
+                # --------------------------------------------------------------------------------
                 os.environ["TMPDIR"] = ""
-            fd = open(os.path.join(tempfile.gettempdir(), "abletonosc-song-structure.json"), "w")
+            fd = open(
+                os.path.join(tempfile.gettempdir(), "abletonosc-song-structure.json"),
+                "w",
+            )
             json.dump(song, fd)
             fd.close()
-            self.logger.warning("Exported song structure to directory %s" % tempfile.gettempdir())
+            self.logger.warning(
+                "Exported song structure to directory %s" % tempfile.gettempdir()
+            )
             return (1,)
-        self.osc_server.add_handler("/live/song/export/structure", song_export_structure)
 
-        #--------------------------------------------------------------------------------
+        self.osc_server.add_handler(
+            "/live/song/export/structure", song_export_structure
+        )
+
+        # --------------------------------------------------------------------------------
         # Callbacks for Song: Scene properties
-        #--------------------------------------------------------------------------------
-        self.osc_server.add_handler("/live/song/get/num_scenes", lambda _: (len(self.song.scenes),))
+        # --------------------------------------------------------------------------------
+        self.osc_server.add_handler(
+            "/live/song/get/num_scenes", lambda _: (len(self.song.scenes),)
+        )
 
         def song_get_scene_names(params):
             if len(params) == 0:
                 scene_index_min, scene_index_max = 0, len(self.song.scenes)
             else:
                 scene_index_min, scene_index_max = params
-            return tuple(self.song.scenes[index].name for index in range(scene_index_min, scene_index_max))
+            return tuple(
+                self.song.scenes[index].name
+                for index in range(scene_index_min, scene_index_max)
+            )
+
         self.osc_server.add_handler("/live/song/get/scenes/name", song_get_scene_names)
 
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         # Callbacks for Song: Cue point properties
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         def song_get_cue_points(song, _):
             cue_points = song.cue_points
-            cue_point_pairs = [(cue_point.name, cue_point.time) for cue_point in cue_points]
+            cue_point_pairs = [
+                (cue_point.name, cue_point.time) for cue_point in cue_points
+            ]
             return tuple(element for pair in cue_point_pairs for element in pair)
-        self.osc_server.add_handler("/live/song/get/cue_points", partial(song_get_cue_points, self.song))
+
+        self.osc_server.add_handler(
+            "/live/song/get/cue_points", partial(song_get_cue_points, self.song)
+        )
 
         def song_jump_to_cue_point(song, params: Tuple[Any] = ()):
             cue_point_index = params[0]
@@ -287,24 +329,36 @@ class SongHandler(AbletonOSCHandler):
             elif isinstance(cue_point_index, int):
                 cue_point = song.cue_points[cue_point_index]
                 cue_point.jump()
-        self.osc_server.add_handler("/live/song/cue_point/jump", partial(song_jump_to_cue_point, self.song))
 
-        self.osc_server.add_handler("/live/song/cue_point/add_or_delete", partial(self._call_method, self.song, "set_or_delete_cue"))
+        self.osc_server.add_handler(
+            "/live/song/cue_point/jump", partial(song_jump_to_cue_point, self.song)
+        )
+
+        self.osc_server.add_handler(
+            "/live/song/cue_point/add_or_delete",
+            partial(self._call_method, self.song, "set_or_delete_cue"),
+        )
+
         def song_cue_point_set_name(song, params: Tuple[Any] = ()):
             cue_point_index = params[0]
             new_name = params[1]
             cue_point = song.cue_points[cue_point_index]
             cue_point.name = new_name
-        self.osc_server.add_handler("/live/song/cue_point/set/name", partial(song_cue_point_set_name, self.song))
 
-        #--------------------------------------------------------------------------------
+        self.osc_server.add_handler(
+            "/live/song/cue_point/set/name", partial(song_cue_point_set_name, self.song)
+        )
+
+        # --------------------------------------------------------------------------------
         # Listener for /live/song/get/beat
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         self.last_song_time = -1.0
-        
+
         def stop_beat_listener(params: Tuple[Any] = ()):
             try:
-                self.song.remove_current_song_time_listener(self.current_song_time_changed)
+                self.song.remove_current_song_time_listener(
+                    self.current_song_time_changed
+                )
                 self.logger.info("Removing beat listener")
             except:
                 pass
@@ -317,9 +371,9 @@ class SongHandler(AbletonOSCHandler):
         self.osc_server.add_handler("/live/song/start_listen/beat", start_beat_listener)
         self.osc_server.add_handler("/live/song/stop_listen/beat", stop_beat_listener)
 
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         # TouchLive patch: the appointed device (the blue hand)
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         def appointed_device_info():
             device = self.song.appointed_device
             if device is None:
@@ -330,7 +384,12 @@ class SongHandler(AbletonOSCHandler):
             path = _device_path_for(device, track)
             if path is None:
                 return None
-            return (list(self.song.tracks).index(track), *path, device.class_name, device.name)
+            return (
+                list(self.song.tracks).index(track),
+                *path,
+                device.class_name,
+                device.name,
+            )
 
         def get_appointed_device_info(params: Tuple[Any] = ()):
             return appointed_device_info()
@@ -353,21 +412,32 @@ class SongHandler(AbletonOSCHandler):
         def appointed_device_remove_listener(params: Tuple[Any] = ()):
             listener_key = ("appointed_device_info", ())
             if listener_key in self.listener_functions:
-                self.song.remove_appointed_device_listener(self.listener_functions[listener_key])
+                self.song.remove_appointed_device_listener(
+                    self.listener_functions[listener_key]
+                )
                 del self.listener_functions[listener_key]
                 del self.listener_objects[listener_key]
 
-        self.osc_server.add_handler("/live/song/get/appointed_device_info", get_appointed_device_info)
-        self.osc_server.add_handler("/live/song/start_listen/appointed_device", appointed_device_listener)
-        self.osc_server.add_handler("/live/song/stop_listen/appointed_device", appointed_device_remove_listener)
+        self.osc_server.add_handler(
+            "/live/song/get/appointed_device_info", get_appointed_device_info
+        )
+        self.osc_server.add_handler(
+            "/live/song/start_listen/appointed_device", appointed_device_listener
+        )
+        self.osc_server.add_handler(
+            "/live/song/stop_listen/appointed_device", appointed_device_remove_listener
+        )
 
     def current_song_time_changed(self):
-        #--------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------
         # If song has rewound or skipped to next beat, sent a /live/beat message
-        #--------------------------------------------------------------------------------
-        if (self.song.current_song_time < self.last_song_time) or \
-                (int(self.song.current_song_time) > int(self.last_song_time)):
-            self.osc_server.send("/live/song/get/beat", (int(self.song.current_song_time),))
+        # --------------------------------------------------------------------------------
+        if (self.song.current_song_time < self.last_song_time) or (
+            int(self.song.current_song_time) > int(self.last_song_time)
+        ):
+            self.osc_server.send(
+                "/live/song/get/beat", (int(self.song.current_song_time),)
+            )
         self.last_song_time = self.song.current_song_time
 
     def clear_api(self):
